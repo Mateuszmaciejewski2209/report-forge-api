@@ -18,12 +18,39 @@ return [
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s',
-        'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
-        Sanctum::currentApplicationUrlWithPort(),
-        // Sanctum::currentRequestHost(),
-    ))),
+    'stateful' => (static function (): array {
+        if ($explicit = env('SANCTUM_STATEFUL_DOMAINS')) {
+            return array_values(array_filter(array_map('trim', explode(',', $explicit))));
+        }
+
+        $domains = [
+            'localhost',
+            'localhost:3000',
+            '127.0.0.1',
+            '127.0.0.1:8000',
+            '::1',
+        ];
+
+        if ($frontend = env('FRONTEND_URL')) {
+            $parsed = parse_url($frontend);
+            $host = $parsed['host'] ?? null;
+            $port = isset($parsed['port']) ? (string) $parsed['port'] : null;
+
+            if (is_string($host) && $host !== '') {
+                $domains[] = $port !== null ? "{$host}:{$port}" : $host;
+
+                if ($host === 'localhost' && $port !== null) {
+                    $domains[] = "127.0.0.1:{$port}";
+                } elseif ($host === '127.0.0.1' && $port !== null) {
+                    $domains[] = "localhost:{$port}";
+                }
+            }
+        }
+
+        $domains[] = Sanctum::currentApplicationUrlWithPort();
+
+        return array_values(array_unique(array_filter($domains)));
+    })(),
 
     /*
     |--------------------------------------------------------------------------
