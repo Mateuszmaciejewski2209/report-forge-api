@@ -3,6 +3,11 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+// W kontenerze Docker 127.0.0.1:5433 z .env hosta nie trafia w Postgresa (serwis `postgres`).
+$reportForgeInDocker = file_exists('/.dockerenv');
+$reportForgeDbHost = $reportForgeInDocker ? 'postgres' : env('DB_HOST', '127.0.0.1');
+$reportForgeDbPort = $reportForgeInDocker ? '5432' : env('DB_PORT', '5432');
+
 return [
 
     /*
@@ -17,7 +22,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => env('DB_CONNECTION', 'pgsql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -87,8 +92,8 @@ return [
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
+            'host' => $reportForgeDbHost,
+            'port' => $reportForgeDbPort,
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
