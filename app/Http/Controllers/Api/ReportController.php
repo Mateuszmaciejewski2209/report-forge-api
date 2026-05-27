@@ -27,6 +27,7 @@ class ReportController extends Controller
         $validated = $request->validate([
             'status' => ['nullable', Rule::in(['all', 'completed', 'processing', 'failed', 'draft'])],
             'search' => ['nullable', 'string', 'max:255'],
+            'template' => ['nullable', Rule::in(array_merge(['all'], ReportTemplateRegistry::allowedIds()))],
         ]);
 
         $query = Report::query()
@@ -46,6 +47,11 @@ class ReportController extends Controller
                     ->whereRaw('LOWER(name) LIKE ?', [$needle])
                     ->orWhereRaw('LOWER(source) LIKE ?', [$needle]);
             });
+        }
+
+        $template = $validated['template'] ?? 'all';
+        if ($template !== 'all') {
+            $query->where('template', $template);
         }
 
         return ReportResource::collection($query->get());
