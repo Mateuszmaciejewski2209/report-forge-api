@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Support\Reports\ReportTemplateRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -21,6 +22,7 @@ class ProfileController extends Controller
             'company' => ['nullable', 'string', 'max:255'],
             'job_title' => ['nullable', 'string', 'max:128'],
             'brand_color' => ['nullable', 'string', 'max:64'],
+            'pdf_template' => ['nullable', 'string', Rule::in(ReportTemplateRegistry::allowedIds())],
         ]);
 
         $user->update($validated);

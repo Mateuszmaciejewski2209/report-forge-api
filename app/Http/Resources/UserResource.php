@@ -20,6 +20,7 @@ class UserResource extends JsonResource
                 ? '/storage/'.ltrim($this->company_logo, '/')
                 : null,
             'brand_color' => $this->brand_color,
+            'pdf_template' => $this->pdf_template ?? 'modern',
             'avatar' => $this->avatar,
         ];
     }

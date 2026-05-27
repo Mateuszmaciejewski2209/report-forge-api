@@ -19,6 +19,7 @@ class ReportResource extends JsonResource
             'source' => $this->source,
             'rows' => $this->rows,
             'status' => $this->status,
+            'template' => $this->template ?? 'modern',
             'createdAt' => $this->created_at?->toIso8601String(),
             'size' => $this->size,
             'author' => $this->author,

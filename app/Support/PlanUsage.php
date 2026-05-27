@@ -141,7 +141,7 @@ class PlanUsage
         }
     }
 
-    /** @return array{key: string, used: string, max: string|null, percent: int} */
+    /** @return array{reports: array{key: string, used: string, max: string|null, percent: int|null}, storage: array{key: string, used: string, max: string|null, percent: int}, ai: array{key: string, used: string, max: string|null, percent: int}} */
     public function usageSnapshot(): array
     {
         $reportsLimit = $this->reportsLimit();
@@ -157,7 +157,7 @@ class PlanUsage
                 'used' => (string) $reportsUsed,
                 'max' => $reportsLimit === null ? null : (string) $reportsLimit,
                 'percent' => $reportsLimit === null
-                    ? min(100, $reportsUsed > 0 ? 12 : 0)
+                    ? null
                     : $this->percent($reportsUsed, $reportsLimit),
             ],
             'storage' => [

@@ -9,6 +9,8 @@ use App\Support\AnalyticsData;
 use App\Support\CsvAnalyzer;
 use App\Support\CsvStorage;
 use App\Support\PlanUsage;
+use App\Support\Reports\ReportTemplatePresenter;
+use App\Support\Reports\ReportTemplateRegistry;
 use App\Support\ReportPdfGenerator;
 use App\Support\ReportProcessor;
 use Illuminate\Http\JsonResponse;
@@ -57,10 +59,12 @@ class ReportController extends Controller
             ->firstOrFail();
 
         $analytics = $this->resolveAnalytics($report);
+        $template = (new ReportTemplateRegistry())->resolve($report->template ?? 'modern');
+        $presented = (new ReportTemplatePresenter($template))->prepare($analytics);
 
         return response()->json(array_merge(
             ['report' => new ReportResource($report)],
-            $analytics,
+            $presented,
         ));
     }
 
@@ -73,6 +77,7 @@ class ReportController extends Controller
             'size' => ['nullable', 'string', 'max:32'],
             'author' => ['nullable', 'string', 'max:128'],
             'csvToken' => ['required', 'string', 'uuid'],
+            'template' => ['nullable', 'string', Rule::in(ReportTemplateRegistry::allowedIds())],
         ]);
 
         $user = $request->user();
@@ -94,6 +99,10 @@ class ReportController extends Controller
 
         $absoluteCsv = Storage::disk('local')->path($csvPath);
         $analytics = (new CsvAnalyzer())->analyze($absoluteCsv);
+        $templateId = $validated['template'] ?? $user->pdf_template ?? 'modern';
+        if (! in_array($templateId, ReportTemplateRegistry::allowedIds(), true)) {
+            $templateId = 'modern';
+        }
 
         $report = Report::query()->create([
             'user_id' => $user->id,
@@ -102,6 +111,7 @@ class ReportController extends Controller
             'source' => $validated['source'],
             'rows' => $validated['rows'] ?? 0,
             'status' => 'processing',
+            'template' => $templateId,
             'size' => $size,
             'author' => $validated['author'] ?? $user->name,
             'csv_path' => $csvPath,

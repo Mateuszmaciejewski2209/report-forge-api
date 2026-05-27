@@ -15,6 +15,7 @@ class Report extends Model
         'source',
         'rows',
         'status',
+        'template',
         'size',
         'author',
         'csv_path',

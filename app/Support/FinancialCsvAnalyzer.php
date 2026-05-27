@@ -119,6 +119,7 @@ class FinancialCsvAnalyzer
             ],
             'rankings' => array_slice($rankings, 0, 25),
             'recommendations' => $recommendations,
+            'statistics' => $this->buildStatistics($ratios, $clients),
             'trend' => $this->refundVsTopupsChart($clients, 7),
             'categories' => [
                 ['name' => 'Low', 'value' => count(array_filter($rankings, fn ($r) => $r['risk'] === 'Low'))],
@@ -355,6 +356,47 @@ class FinancialCsvAnalyzer
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * @param list<float> $ratios
+     * @param list<array{spent: float, topups: float, refunds: float, cashback: float}> $clients
+     * @return list<array{label: string, value: string}>
+     */
+    private function buildStatistics(array $ratios, array $clients): array
+    {
+        if ($ratios === []) {
+            return [];
+        }
+
+        $sorted = $ratios;
+        sort($sorted);
+        $count = count($sorted);
+        $mean = array_sum($sorted) / $count;
+        $mid = (int) floor($count / 2);
+        $median = $count % 2 === 0
+            ? ($sorted[$mid - 1] + $sorted[$mid]) / 2
+            : $sorted[$mid];
+
+        $variance = 0.0;
+        foreach ($sorted as $r) {
+            $variance += ($r - $mean) ** 2;
+        }
+        $std = sqrt($variance / max($count, 1));
+
+        $p75Index = (int) floor($count * 0.75);
+        $p95Index = (int) floor($count * 0.95);
+        $spentValues = array_column($clients, 'spent');
+        sort($spentValues);
+
+        return [
+            ['label' => 'Mean refund ratio', 'value' => number_format($mean, 2).'%'],
+            ['label' => 'Median refund ratio', 'value' => number_format($median, 2).'%'],
+            ['label' => 'Std deviation (ratio)', 'value' => number_format($std, 2).'%'],
+            ['label' => '75th percentile', 'value' => number_format($sorted[min($p75Index, $count - 1)], 2).'%'],
+            ['label' => '95th percentile', 'value' => number_format($sorted[min($p95Index, $count - 1)], 2).'%'],
+            ['label' => 'Mean total spent', 'value' => $this->formatCompact(array_sum($spentValues) / max($count, 1))],
+        ];
     }
 
     private function formatCompact(float $value): string
