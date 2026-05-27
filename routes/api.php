@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\UploadController;
 use Illuminate\Support\Facades\Route;
@@ -18,8 +20,12 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::patch('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/logo', [ProfileController::class, 'uploadLogo']);
+    Route::delete('/profile/logo', [ProfileController::class, 'deleteLogo']);
 
     Route::get('/dashboard', DashboardController::class);
+    Route::get('/billing', BillingController::class);
     Route::get('/reports', [ReportController::class, 'index']);
     Route::post('/reports', [ReportController::class, 'store']);
     Route::get('/reports/{code}', [ReportController::class, 'show']);

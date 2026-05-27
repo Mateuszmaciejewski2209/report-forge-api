@@ -20,7 +20,9 @@ class ReportController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $query = Report::query()->orderByDesc('created_at');
+        $query = Report::query()
+            ->where('user_id', $request->user()->id)
+            ->orderByDesc('created_at');
 
         $status = $validated['status'] ?? 'all';
         if ($status !== 'all') {
@@ -39,9 +41,12 @@ class ReportController extends Controller
         return ReportResource::collection($query->get());
     }
 
-    public function show(string $code): JsonResponse
+    public function show(Request $request, string $code): JsonResponse
     {
-        $report = Report::query()->where('code', $code)->firstOrFail();
+        $report = Report::query()
+            ->where('user_id', $request->user()->id)
+            ->where('code', $code)
+            ->firstOrFail();
 
         return response()->json([
             'report' => new ReportResource($report),
@@ -77,13 +82,14 @@ class ReportController extends Controller
         $code = 'rpt_'.str_pad((string) (Report::query()->count() + 1), 3, '0', STR_PAD_LEFT);
 
         $report = Report::query()->create([
+            'user_id' => $request->user()->id,
             'code' => $code,
             'name' => $validated['name'],
             'source' => $validated['source'],
             'rows' => $validated['rows'] ?? 0,
             'status' => $validated['status'] ?? 'processing',
             'size' => $validated['size'] ?? '0 KB',
-            'author' => $validated['author'] ?? 'System',
+            'author' => $validated['author'] ?? $request->user()->name,
         ]);
 
         return response()->json([
