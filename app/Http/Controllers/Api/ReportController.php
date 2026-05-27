@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ReportResource;
 use App\Models\Report;
 use App\Support\AnalyticsData;
+use App\Support\CsvAnalyzer;
+use App\Support\CsvStorage;
 use App\Support\PlanUsage;
+use App\Support\ReportPdfGenerator;
 use App\Support\ReportProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
@@ -33,10 +38,11 @@ class ReportController extends Controller
 
         $search = trim($validated['search'] ?? '');
         if ($search !== '') {
-            $query->where(function ($builder) use ($search) {
+            $needle = '%'.addcslashes(mb_strtolower($search), '%_\\').'%';
+            $query->where(function ($builder) use ($needle) {
                 $builder
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('source', 'like', "%{$search}%");
+                    ->whereRaw('LOWER(name) LIKE ?', [$needle])
+                    ->orWhereRaw('LOWER(source) LIKE ?', [$needle]);
             });
         }
 
@@ -50,24 +56,12 @@ class ReportController extends Controller
             ->where('code', $code)
             ->firstOrFail();
 
-        return response()->json([
-            'report' => new ReportResource($report),
-            'metrics' => [
-                ['label' => 'Total samples', 'value' => number_format($report->rows)],
-                ['label' => 'Pass rate', 'value' => '94.2%', 'delta' => '+1.4% vs prior'],
-                ['label' => 'Anomalies', 'value' => '38', 'delta' => '-12 vs prior', 'trend' => 'down'],
-                ['label' => 'Avg processing', 'value' => '2.4s'],
-            ],
-            'insights' => AnalyticsData::insights(),
-            'insightTags' => [
-                'Correlation: TMP-01 ↔ PRS-01',
-                'Confidence 0.92',
-                'Suggested action',
-            ],
-            'trend' => AnalyticsData::trend(),
-            'categories' => AnalyticsData::categories(),
-            'anomalies' => AnalyticsData::anomalies(),
-        ]);
+        $analytics = $this->resolveAnalytics($report);
+
+        return response()->json(array_merge(
+            ['report' => new ReportResource($report)],
+            $analytics,
+        ));
     }
 
     public function store(Request $request): JsonResponse
@@ -76,33 +70,95 @@ class ReportController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'source' => ['required', 'string', 'max:255'],
             'rows' => ['nullable', 'integer', 'min:0'],
-            'status' => ['nullable', Rule::in(['completed', 'processing', 'failed', 'draft'])],
             'size' => ['nullable', 'string', 'max:32'],
             'author' => ['nullable', 'string', 'max:128'],
+            'csvToken' => ['required', 'string', 'uuid'],
         ]);
 
+        $user = $request->user();
         $size = $validated['size'] ?? '0 KB';
-        $planUsage = new PlanUsage($request->user());
+        $planUsage = new PlanUsage($user);
         $planUsage->assertCanCreateReport($size);
         $planUsage->assertCanConsumeAiCredits();
 
         $code = 'rpt_'.str_pad((string) (Report::query()->count() + 1), 3, '0', STR_PAD_LEFT);
+        $csvStorage = new CsvStorage();
+        $csvPath = $csvStorage->moveToReport($user, $validated['csvToken'], $code);
+
+        if ($csvPath === null) {
+            return response()->json([
+                'message' => 'Upload session expired. Please upload the CSV again.',
+                'error' => 'csv_token_invalid',
+            ], 422);
+        }
+
+        $absoluteCsv = Storage::disk('local')->path($csvPath);
+        $analytics = (new CsvAnalyzer())->analyze($absoluteCsv);
 
         $report = Report::query()->create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
             'code' => $code,
             'name' => $validated['name'],
             'source' => $validated['source'],
             'rows' => $validated['rows'] ?? 0,
             'status' => 'processing',
             'size' => $size,
-            'author' => $validated['author'] ?? $request->user()->name,
+            'author' => $validated['author'] ?? $user->name,
+            'csv_path' => $csvPath,
+            'analytics' => $analytics,
         ]);
 
         $report = (new ReportProcessor())->finalize($report);
 
+        try {
+            (new ReportPdfGenerator())->generate($report->fresh(), $user);
+        } catch (\Throwable) {
+            // Raport pozostaje ukończony nawet gdy PDF się nie wygeneruje
+        }
+
         return response()->json([
-            'report' => new ReportResource($report),
+            'report' => new ReportResource($report->fresh()),
         ], 201);
+    }
+
+    public function pdf(Request $request, string $code): StreamedResponse|JsonResponse
+    {
+        $report = Report::query()
+            ->where('user_id', $request->user()->id)
+            ->where('code', $code)
+            ->firstOrFail();
+
+        if (! $report->hasPdf() || ! Storage::disk('local')->exists($report->pdf_path)) {
+            return response()->json(['message' => 'PDF not available for this report.'], 404);
+        }
+
+        $filename = preg_replace('/[^a-zA-Z0-9._-]+/', '_', $report->name).'.pdf';
+
+        return Storage::disk('local')->download($report->pdf_path, $filename, [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function resolveAnalytics(Report $report): array
+    {
+        if (is_array($report->analytics) && $report->analytics !== []) {
+            return $report->analytics;
+        }
+
+        return [
+            'reportType' => 'generic',
+            'metrics' => [
+                ['label' => 'Total samples', 'value' => number_format($report->rows)],
+                ['label' => 'Pass rate', 'value' => '—', 'delta' => 'Legacy report'],
+                ['label' => 'Anomalies', 'value' => '—', 'delta' => 'Re-upload CSV'],
+                ['label' => 'Avg processing', 'value' => '—', 'delta' => '—'],
+            ],
+            'insights' => AnalyticsData::insights(),
+            'insightTags' => ['Legacy data'],
+            'trend' => AnalyticsData::trend(),
+            'categories' => AnalyticsData::categories(),
+            'anomalies' => AnalyticsData::anomalies(),
+        ];
     }
 }

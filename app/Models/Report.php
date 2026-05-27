@@ -17,6 +17,9 @@ class Report extends Model
         'status',
         'size',
         'author',
+        'csv_path',
+        'analytics',
+        'pdf_path',
     ];
 
     public function user(): BelongsTo
@@ -29,6 +32,12 @@ class Report extends Model
     {
         return [
             'rows' => 'integer',
+            'analytics' => 'array',
         ];
+    }
+
+    public function hasPdf(): bool
+    {
+        return $this->pdf_path !== null && $this->pdf_path !== '';
     }
 }

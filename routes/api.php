@@ -29,5 +29,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports', [ReportController::class, 'index']);
     Route::post('/reports', [ReportController::class, 'store']);
     Route::get('/reports/{code}', [ReportController::class, 'show']);
+    Route::get('/reports/{code}/pdf', [ReportController::class, 'pdf']);
     Route::post('/uploads', [UploadController::class, 'store']);
 });
