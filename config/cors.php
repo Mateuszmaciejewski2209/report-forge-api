@@ -6,11 +6,15 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => array_filter([
-        env('FRONTEND_URL', 'http://localhost:8080'),
-    ]),
+    // W produkcji ustaw FRONTEND_URL; w dev Vite może użyć dowolnego portu localhost.
+    'allowed_origins' => array_values(array_filter([
+        env('FRONTEND_URL'),
+    ])),
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => [
+        '#^https?://localhost(:\d+)?$#',
+        '#^https?://127\.0\.0\.1(:\d+)?$#',
+    ],
 
     'allowed_headers' => ['*'],
 
