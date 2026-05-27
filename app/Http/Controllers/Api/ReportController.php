@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ReportResource;
 use App\Models\Report;
 use App\Support\AnalyticsData;
+use App\Support\PlanUsage;
+use App\Support\ReportProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -79,6 +81,11 @@ class ReportController extends Controller
             'author' => ['nullable', 'string', 'max:128'],
         ]);
 
+        $size = $validated['size'] ?? '0 KB';
+        $planUsage = new PlanUsage($request->user());
+        $planUsage->assertCanCreateReport($size);
+        $planUsage->assertCanConsumeAiCredits();
+
         $code = 'rpt_'.str_pad((string) (Report::query()->count() + 1), 3, '0', STR_PAD_LEFT);
 
         $report = Report::query()->create([
@@ -87,10 +94,12 @@ class ReportController extends Controller
             'name' => $validated['name'],
             'source' => $validated['source'],
             'rows' => $validated['rows'] ?? 0,
-            'status' => $validated['status'] ?? 'processing',
-            'size' => $validated['size'] ?? '0 KB',
+            'status' => 'processing',
+            'size' => $size,
             'author' => $validated['author'] ?? $request->user()->name,
         ]);
+
+        $report = (new ReportProcessor())->finalize($report);
 
         return response()->json([
             'report' => new ReportResource($report),

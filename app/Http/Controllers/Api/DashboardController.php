@@ -42,10 +42,10 @@ class DashboardController extends Controller
             ],
             'trend' => $this->trendForUser($userId),
             'categories' => [
-                ['name' => 'Pass', 'value' => $completed],
-                ['name' => 'Warn', 'value' => $processing],
-                ['name' => 'Fail', 'value' => $failed],
-                ['name' => 'Review', 'value' => $draft],
+                ['name' => 'completed', 'value' => $completed],
+                ['name' => 'processing', 'value' => $processing],
+                ['name' => 'failed', 'value' => $failed],
+                ['name' => 'draft', 'value' => $draft],
             ],
             'recentReports' => ReportResource::collection($recentReports),
             'meta' => [
